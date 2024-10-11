@@ -10,27 +10,78 @@ import Action from "../../../../lib/action";
 import { Tooltip } from "react-tooltip";
 import 'react-tooltip/dist/react-tooltip.css'
 import IssueSkeleton from "@/components/skeleton/issue-skeleton";
+import Pagination from "../../../../../components/Pagination";
+import useDebounce from "../../../../hooks/useDebounce";
 
 const IssueTracker = ({ params }) => {
     
     const {id} = params;
     const [issueListing, setIssueLIsting] = useState([]);
     const [loader, setLoader] = useState(true);
+    const [searchValue, setSearchValue] = useState('');
+    const [sorting, setSorting] = useState('');
+    const [filterValues, setFilterValues] = useState({sval: '',stype: '', page:''});
+    const [fromItem, setFromItem] = useState(0)
+    const [toItem, setToItem] = useState(0)
+    const [itemsPerPage, setItemsPerPage] = useState(0);
+    const [totalItems, setTotalItems] = useState(0);
+    const [currentPage, setCurrentPage] = useState(1);
+    const debouncedValue = useDebounce(filterValues, 500);
 
     useEffect(() => {
-        Action.getIssueLIsting(id).then((data) => {
-            if(data.success == true)
-            {
-                console.log(data.data);
-                setLoader(false);
-                setIssueLIsting(data.data?.issue_details?.data);
-            }
-        }).catch((error) => {
-            toast.error('unable to get issue  listing');
-            setLoader(false);
-            console.log(error);
-        });
-    }, [])
+        const queryString = new URLSearchParams(filterValues).toString();
+        if (debouncedValue) {
+            getIssues(queryString);
+        }
+    }, [debouncedValue])
+
+    function handleSearch(e) {
+        const { name, value } = e.target;
+        setSearchValue(value)
+        const updatedValues = {
+        ...filterValues,
+        [name]: value,
+        };
+
+        setFilterValues(updatedValues);
+    }
+    
+    function handleFilter(e) {
+        const { name, value } = e.target;
+        setSorting(value);
+        const updatedValues = {
+        ...filterValues,
+        [name]: value,
+        };
+        setFilterValues(updatedValues);
+    }
+
+    const handleSearchAction = () => {
+        const queryString = new URLSearchParams(filterValues).toString();
+        getIssues(queryString);
+    }
+
+    const handleResetAction = () => {
+        const updatedValues = {
+            ...filterValues,
+            ['sval']: '',
+            ['stype']: '',
+            ['page']: '',
+        };
+        setFilterValues(updatedValues);
+        setSearchValue('');
+        setSorting('');
+        setCurrentPage(1);
+    }
+
+    const handlePageChange = (page) => {
+        const updatedValues = {
+            ...filterValues,
+            ['page']: page,
+        };
+        setFilterValues(updatedValues);
+        setCurrentPage(page);
+    };
 
     const IssuePriority = (id) => {
         if(id == 1) {
@@ -56,6 +107,25 @@ const IssueTracker = ({ params }) => {
         }
     };
 
+    const getIssues = (filter) => {
+        Action.getIssueLIsting(id, filter).then((data) => {
+            if(data.success == true)
+            {
+                console.log(data.data);
+                setLoader(false);
+                setIssueLIsting(data.data?.issue_details?.data);
+                setFromItem(data.data?.issue_details?.from);
+                setToItem(data.data?.issue_details?.to)
+                setItemsPerPage(data.data?.issue_details?.per_page)
+                setTotalItems(data.data?.issue_details?.total)
+            }
+        }).catch((error) => {
+            toast.error('unable to get issue  listing');
+            setLoader(false);
+            console.log(error);
+        });
+    }
+
     return (
         <>
             <div className="border-b mb-8">
@@ -64,20 +134,26 @@ const IssueTracker = ({ params }) => {
             <div className="flex justify-end text-center">
                 <Link href={`create/${id}`} className="w-44 py-2 px-6 bg-primary flex items-center justify-center font-medium"><FaPlus size={16} className="mr-1" />Create</Link>
             </div>
+            <div className="flex justify-between items-center">
             <div className="flex">
                 <input 
                     type="text"
-                    placeholder="Search" 
+                    name="sval"
+                    placeholder="Search"
+                    value={searchValue}
+                    onChange={handleSearch} 
                     className="focus:outline-none border-b py-2 px-2"
                 />
-                <select className="w-48 focus:outline-none py-2 px-4 border text-[#002855] font-light">
-                    <option>Filter</option>
-                    <option>Name</option>
-                    <option>Description</option>
-                    <option>Action</option>
+                <select name="stype" value={sorting} className="w-48 focus:outline-none py-2 px-4 border text-[#002855] font-light" onChange={handleFilter}>
+                    <option value=''>Filter</option>
+                    <option value={'name'}>Name</option>
+                    <option value={'desc'}>Description</option>
+                    <option value={'action'}>Action</option>
                 </select>
-                <button className="bg-primary px-4 py-2 ml-2 mr-2 text-white"><CiSearch size={18}/></button>
-                <button className="bg-primary px-4 py-2 ml-2 mr-2 text-white"><GrPowerReset size={18}/></button>
+                <button className="bg-primary px-4 py-2 ml-2 mr-2 text-white" onClick={handleSearchAction}><CiSearch size={18}/></button>
+                <button className="bg-primary px-4 py-2 ml-2 mr-2 text-white" onClick={handleResetAction}><GrPowerReset size={18}/></button>
+            </div>
+            <p className="text-[#555555] font-medium">Showing {fromItem} to {toItem} of {totalItems} Issues</p>
             </div>
             
             {
@@ -179,8 +255,23 @@ const IssueTracker = ({ params }) => {
                                 }
                                 </> 
                             }
+                            {
+                                (issueListing.length == 0) && (
+                                    <tr>
+                                        <td colSpan={13} className="py-4 text-center text-sm">No Data Found</td>
+                                    </tr>
+                                )
+                            }
                         </tbody>
                     </table>
+                    <div>
+                        <Pagination 
+                            totalItems={totalItems}
+                            itemsPerPage={itemsPerPage}
+                            currentPage={currentPage}
+                            onPageChange={handlePageChange}
+                        />
+                    </div>
                 </div>
             }
         </>

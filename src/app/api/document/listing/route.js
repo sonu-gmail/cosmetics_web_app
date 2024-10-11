@@ -3,9 +3,10 @@ import { getServerAuthSession } from "../../auth/auth";
 
 export async function POST(req, res) {
     const authSession = await getServerAuthSession();
+    const queryParams = await req.json();
     if(authSession?.accessToken) {
 
-        let apiUrl = process.env.NEXT_PUBLIC_API_URL+'/documents';
+        let apiUrl = process.env.NEXT_PUBLIC_API_URL+'/documents?'+queryParams;
         let response = await fetch(apiUrl, {
             method: "GET",
             headers: {

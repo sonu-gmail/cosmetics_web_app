@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
 import { getServerAuthSession } from "../../../../api/auth/auth";
 
-export async function GET(request, { params }) {
+export async function POST(req, { params }) {
     const { id } = params
     const authSession = await getServerAuthSession();
-
+    const queryParams = await req.json();
     if(authSession?.accessToken) {
 
-        let apiUrl = process.env.NEXT_PUBLIC_API_URL+'/issue/'+id;
+        let apiUrl = process.env.NEXT_PUBLIC_API_URL+'/issue/'+id+'?'+queryParams;
         let response = await fetch(apiUrl, {
             method: "GET",
             headers: {

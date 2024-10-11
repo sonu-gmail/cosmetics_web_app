@@ -10,19 +10,89 @@ import toast from "react-hot-toast";
 import MemberSkeleton from "../../../../../components/skeleton/member-skeleton";
 import { Dialog, DialogBackdrop, DialogPanel, DialogTitle } from '@headlessui/react';
 import { ExclamationTriangleIcon } from '@heroicons/react/24/outline';
+import Pagination from "../../../../../components/Pagination";
+import useDebounce from "../../../../hooks/useDebounce";
 
 const MemberListing = () => {
     const [open, setOpen] = useState(false)
     const [memberId, setMemberId] = useState('');
     const [members, setMembers] = useState([]);
     const [loader, setLoader] = useState(true);
+    const [searchValue, setSearchValue] = useState('');
+    const [sorting, setSorting] = useState('');
+    const [filterValues, setFilterValues] = useState({sval: '',stype: '', page:''});
+    const [fromItem, setFromItem] = useState(0)
+    const [toItem, setToItem] = useState(0)
+    const [itemsPerPage, setItemsPerPage] = useState(0);
+    const [totalItems, setTotalItems] = useState(0);
+    const [currentPage, setCurrentPage] = useState(1);
+    const debouncedValue = useDebounce(filterValues, 500);
 
     useEffect(() => {
-        Action.getMembers().then((data) => {
+        const queryString = new URLSearchParams(filterValues).toString();
+        if (debouncedValue) {
+            getMemmbers(queryString);
+        }
+    },[debouncedValue])
+
+    function handleSearch(e) {
+        const { name, value } = e.target;
+        setSearchValue(value)
+        const updatedValues = {
+        ...filterValues,
+        [name]: value,
+        };
+
+        setFilterValues(updatedValues);
+    }
+    
+    function handleFilter(e) {
+        const { name, value } = e.target;
+        setSorting(value);
+        const updatedValues = {
+        ...filterValues,
+        [name]: value,
+        };
+        setFilterValues(updatedValues);
+    }
+
+    const handleSearchAction = () => {
+        const queryString = new URLSearchParams(filterValues).toString();
+        getMemmbers(queryString);
+    }
+
+    const handleResetAction = () => {
+        const updatedValues = {
+            ...filterValues,
+            ['sval']: '',
+            ['stype']: '',
+            ['page']: '',
+        };
+        setFilterValues(updatedValues);
+        setSearchValue('');
+        setSorting('');
+        setCurrentPage(1);
+    }
+
+    const handlePageChange = (page) => {
+        const updatedValues = {
+            ...filterValues,
+            ['page']: page,
+        };
+        setFilterValues(updatedValues);
+        setCurrentPage(page);
+    };
+
+    const getMemmbers = (filters) => {
+        Action.getMembers(filters).then((data) => {
             console.log(data);
             if(data.success == true)
             {
                 setMembers(data.data.data);
+                setFromItem(data.data?.from);
+                setToItem(data.data?.to)
+                setItemsPerPage(data.data?.per_page)
+                setTotalItems(data.data?.total)
                 setLoader(false);
             }
         }).catch((error) => {
@@ -30,7 +100,7 @@ const MemberListing = () => {
             setLoader(false);
             console.log(error);
         });
-    },[memberId])
+    }
 
     const handleDialogBox = (id) => {
         setMemberId(id);
@@ -58,21 +128,27 @@ const MemberListing = () => {
             <div className="flex justify-end text-center">
                 <Link href={`/admin/member/create`} className="w-44 py-2 px-6 bg-primary flex items-center justify-center font-medium"><FaPlus size={16} className="mr-1" />Create</Link>
             </div>
-            <div className="flex">
-                <input 
-                    type="text"
-                    placeholder="Search" 
-                    className="focus:outline-none border-b py-2 px-2"
-                />
-                <select className="w-48 focus:outline-none py-2 px-4 border text-[#002855] font-light">
-                    <option>Sort By</option>
-                    <option value={`first_name_asc`}>First Name Ascending</option>
-                    <option value={`first_name_desc`}>First Name Desecding</option>
-                    <option value={`last_name_asc`}>Last Name Ascending</option>
-                    <option value={`last_name_desc`}>Last Name Desecding</option>
-                </select>
-                <button className="bg-primary px-4 py-2 ml-2 mr-2 text-white"><CiSearch size={18}/></button>
-                <button className="bg-primary px-4 py-2 ml-2 mr-2 text-white"><GrPowerReset size={18}/></button>
+            <div className="flex justify-between items-center">
+                <div className="flex">
+                    <input 
+                        type="text"
+                        placeholder="Search" 
+                        name="sval"
+                        value={searchValue}
+                        onChange={handleSearch} 
+                        className="focus:outline-none border-b py-2 px-2"
+                    />
+                    <select name="stype" value={sorting} className="w-48 focus:outline-none py-2 px-4 border text-[#002855] font-light" onChange={handleFilter}>
+                        <option value=''>Sort By</option>
+                        <option value={`first_name_asc`}>First Name Ascending</option>
+                        <option value={`first_name_desc`}>First Name Desecding</option>
+                        <option value={`last_name_asc`}>Last Name Ascending</option>
+                        <option value={`last_name_desc`}>Last Name Desecding</option>
+                    </select>
+                    <button className="bg-primary px-4 py-2 ml-2 mr-2 text-white" onClick={handleSearchAction}><CiSearch size={18}/></button>
+                    <button className="bg-primary px-4 py-2 ml-2 mr-2 text-white" onClick={handleResetAction}><GrPowerReset size={18}/></button>
+                </div>
+                <p className="text-[#555555] font-medium">Showing {fromItem} to {toItem} of {totalItems} Members</p>
             </div>
             <div className="mt-8">
                 {
@@ -113,8 +189,23 @@ const MemberListing = () => {
                                         </tr>
                                     ))
                                 }
+                                {
+                                    ( members.length == 0) ? <>
+                                        <tr>
+                                            <td colSpan={7} className="px-6 py-3 text-center text-xs font-medium text-[#002854]">Data Not Found</td>
+                                        </tr>
+                                    </> : ''
+                                }
                             </tbody>
                         </table>
+                        <div>
+                            <Pagination 
+                                totalItems={totalItems}
+                                itemsPerPage={itemsPerPage}
+                                currentPage={currentPage}
+                                onPageChange={handlePageChange}
+                            />
+                        </div>
                     </>
                 }
             </div>
